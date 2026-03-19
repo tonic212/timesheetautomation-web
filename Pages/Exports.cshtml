@@ -1,0 +1,78 @@
+﻿@page
+@model TimesheetAutomation.Web.Pages.ExportsModel
+@{
+    ViewData["Title"] = "Exports";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">Fortnight Exports</h1>
+            <div class="text-muted">Generate and download your current fortnight workbook.</div>
+        </div>
+        <a asp-page="/Index" class="btn btn-outline-secondary">Back to Dashboard</a>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="alert alert-info">@Model.StatusMessage</div>
+    }
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h2 class="h5">Generate Current Fortnight</h2>
+            <p class="mb-3">
+                This version fills only the approved input cells on the <strong>Time sheet</strong> and preserves workbook formulas.
+            </p>
+            <form method="post" asp-page-handler="Generate">
+                <button type="submit" class="btn btn-primary">Generate Export</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h2 class="h5 mb-3">Export History</h2>
+
+            @if (Model.Exports.Count == 0)
+            {
+                <p class="text-muted mb-0">No exports generated yet.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Created</th>
+                                <th>Period Start</th>
+                                <th>Period End</th>
+                                <th>File Name</th>
+                                <th style="width: 140px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Exports)
+                            {
+                                <tr>
+                                    <td>@item.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td>@item.PeriodStartDate.ToString("yyyy-MM-dd")</td>
+                                    <td>@item.PeriodEndDate.ToString("yyyy-MM-dd")</td>
+                                    <td>@item.FileName</td>
+                                    <td>
+                                        <a asp-page="/Exports"
+                                           asp-page-handler="Download"
+                                           asp-route-exportId="@item.Id"
+                                           class="btn btn-sm btn-outline-primary">
+                                            Download
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

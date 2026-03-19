@@ -1,0 +1,30 @@
+services:
+  timesheetautomation:
+    container_name: timesheetautomation-web
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: timesheetautomation-web:latest
+    restart: unless-stopped
+    ports:
+      - "7152:7152"
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ASPNETCORE_URLS: "http://+:7152"
+      Authentication__Google__ClientId: "YOUR_GOOGLE_CLIENT_ID"
+      Authentication__Google__ClientSecret: "YOUR_GOOGLE_CLIENT_SECRET"
+      ConnectionStrings__DefaultConnection: "Data Source=/app/App_Data/timesheet.db"
+      PayPeriod__FortnightAnchorDate: "2022-12-29"
+      PayPeriod__StandardDailyHours: "8.0"
+      ExcelExport__TemplatePath: "/app/Templates/Master_Timesheet_Template.xlsx"
+      ExcelExport__ExportRootFolder: "/app/Exports"
+      ExcelExport__TimeSheetSheetName: "Time sheet"
+      ExcelExport__TilBalanceSheetName: "TIL Balance"
+      ExcelExport__TimeSheetStartRow: "7"
+      ExcelExport__TimeSheetDayCount: "14"
+      ExcelExport__TilBalanceHeaderRows: "5"
+      ExcelExport__TilBalanceStartRow: "6"
+    volumes:
+      - ./docker-data/App_Data:/app/App_Data
+      - ./docker-data/Exports:/app/Exports
+      - ./docker-data/Templates:/app/Templates

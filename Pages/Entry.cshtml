@@ -1,0 +1,464 @@
+﻿@page "{date?}"
+@model TimesheetAutomation.Web.Pages.EntryModel
+@{
+    ViewData["Title"] = "Daily Entry";
+
+    var currentDate = Model.Input.WorkDate;
+    var previousDate = currentDate.AddDays(-1);
+    var nextDate = currentDate.AddDays(1);
+    bool canGoPrevious = previousDate >= Model.MinEditableDate;
+    bool canGoNext = nextDate <= Model.MaxEditableDate;
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="h3 mb-1">Daily Entry</h1>
+            <div class="text-muted">Enter or edit a timesheet day.</div>
+        </div>
+        <a asp-page="/Index" class="btn btn-outline-secondary">Back to Dashboard</a>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body py-3">
+            <div class="d-flex justify-content-center align-items-center gap-3 flex-wrap">
+                @if (canGoPrevious)
+                {
+                    <a asp-page="/Entry"
+                       asp-route-date="@previousDate.ToString("yyyy-MM-dd")"
+                       class="btn btn-outline-secondary">
+                        &lt; Previous Day
+                    </a>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-outline-secondary" disabled>
+                        &lt; Previous Day
+                    </button>
+                }
+
+                <div class="fw-semibold fs-5">
+                    Selected Date @currentDate.ToString("dd/MM/yy")
+                </div>
+
+                @if (canGoNext)
+                {
+                    <a asp-page="/Entry"
+                       asp-route-date="@nextDate.ToString("yyyy-MM-dd")"
+                       class="btn btn-outline-secondary">
+                        Next Day &gt;
+                    </a>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-outline-secondary" disabled>
+                        Next Day &gt;
+                    </button>
+                }
+            </div>
+            <div class="text-center text-muted mt-2">
+                You can edit dates from @Model.MinEditableDate.ToString("dd/MM/yyyy") to @Model.MaxEditableDate.ToString("dd/MM/yyyy").
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="post">
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                <input asp-for="Input.WorkDate" type="hidden" />
+                <input asp-for="Input.StartTime" type="hidden" />
+                <input asp-for="Input.FinishTime" type="hidden" />
+                <input asp-for="Input.PublicHolidayWorked" type="hidden" id="PublicHolidayWorkedHidden" />
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Work Date</label>
+                        <input class="form-control" value="@Model.Input.WorkDate.ToString("yyyy-MM-dd")" disabled />
+                    </div>
+
+                    <div class="col-md-8">
+                        <div class="alert alert-info mb-0">
+                            This form uses a <strong>12-hour clock</strong> format. Please select times using <strong>AM</strong> or <strong>PM</strong>, not 24-hour time.
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-check mt-2">
+                            <input asp-for="Input.IsPublicHoliday" class="form-check-input" id="publicHolidayCheckbox" />
+                            <label asp-for="Input.IsPublicHoliday" class="form-check-label">Public Holiday</label>
+                        </div>
+                        <div class="form-text">
+                            Tick this if the day is a public holiday.
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Start Time</label>
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <select asp-for="Input.StartHour" asp-items="Model.HourOptions" class="form-select time-input start-input"></select>
+                            </div>
+                            <div class="col-4">
+                                <select asp-for="Input.StartMinute" asp-items="Model.MinuteOptions" class="form-select time-input start-input"></select>
+                            </div>
+                            <div class="col-4">
+                                <select asp-for="Input.StartPeriod" asp-items="Model.PeriodOptions" class="form-select time-input start-input"></select>
+                            </div>
+                        </div>
+                        <span asp-validation-for="Input.StartTime" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Finish Time</label>
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <select asp-for="Input.FinishHour" asp-items="Model.HourOptions" class="form-select time-input finish-input"></select>
+                            </div>
+                            <div class="col-4">
+                                <select asp-for="Input.FinishMinute" asp-items="Model.MinuteOptions" class="form-select time-input finish-input"></select>
+                            </div>
+                            <div class="col-4">
+                                <select asp-for="Input.FinishPeriod" asp-items="Model.PeriodOptions" class="form-select time-input finish-input"></select>
+                            </div>
+                        </div>
+                        <span asp-validation-for="Input.FinishTime" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="Input.MealBreakMinutes" class="form-label">Meal Break</label>
+                        <select asp-for="Input.MealBreakMinutes" asp-items="Model.MealBreakOptions" class="form-select" id="MealBreakMinutes"></select>
+                        <span asp-validation-for="Input.MealBreakMinutes" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="Input.AnnualLeaveHours" class="form-label">Annual Leave Hours</label>
+                        <input asp-for="Input.AnnualLeaveHours" class="form-control hour-source-input" type="number" step="0.01" id="AnnualLeaveHours" />
+                        <span asp-validation-for="Input.AnnualLeaveHours" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="Input.SickLeaveHours" class="form-label">Sick Leave Hours</label>
+                        <input asp-for="Input.SickLeaveHours" class="form-control hour-source-input" type="number" step="0.01" id="SickLeaveHours" />
+                        <span asp-validation-for="Input.SickLeaveHours" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="Input.LongServiceLeaveHours" class="form-label">Long Service Leave Hours</label>
+                        <input asp-for="Input.LongServiceLeaveHours" class="form-control hour-source-input" type="number" step="0.01" id="LongServiceLeaveHours" />
+                        <span asp-validation-for="Input.LongServiceLeaveHours" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="Input.TimeInLieuTakenHours" class="form-label">TIL Taken Hours</label>
+                        <input asp-for="Input.TimeInLieuTakenHours" class="form-control" type="number" step="0.01" id="TimeInLieuTakenHours" />
+                        <div class="form-text" id="tilTopUpHelp">
+                            TIL can only be used to top worked hours up to @Model.StandardDayHours:0.## hours.
+                        </div>
+                        <span asp-validation-for="Input.TimeInLieuTakenHours" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-12">
+                        <label asp-for="Input.Notes" class="form-label">Comments</label>
+                        <textarea asp-for="Input.Notes" class="form-control" rows="4"></textarea>
+                        <span asp-validation-for="Input.Notes" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Save Entry</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h2 class="h5 mb-3">Audit History</h2>
+
+            @if (Model.AuditHistory.Count == 0)
+            {
+                <p class="text-muted mb-0">No audit history for this date yet.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Changed</th>
+                                <th>Field</th>
+                                <th>Old Value</th>
+                                <th>New Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.AuditHistory)
+                            {
+                                <tr>
+                                    <td>@item.ChangedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td>@item.FieldName</td>
+                                    <td>@(string.IsNullOrWhiteSpace(item.OldValue) ? "-" : item.OldValue)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(item.NewValue) ? "-" : item.NewValue)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="publicHolidayModal" tabindex="-1" aria-labelledby="publicHolidayModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title" id="publicHolidayModalLabel">Public Holiday</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Did you work this public holiday?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="publicHolidayNoButton">No</button>
+                <button type="button" class="btn btn-primary" id="publicHolidayYesButton">Yes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            const standardDayHours = @Model.StandardDayHours.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            const publicHolidayCheckbox = document.getElementById('publicHolidayCheckbox');
+            const publicHolidayWorkedHidden = document.getElementById('PublicHolidayWorkedHidden');
+
+            const startHour = document.getElementById('Input_StartHour');
+            const startMinute = document.getElementById('Input_StartMinute');
+            const startPeriod = document.getElementById('Input_StartPeriod');
+
+            const finishHour = document.getElementById('Input_FinishHour');
+            const finishMinute = document.getElementById('Input_FinishMinute');
+            const finishPeriod = document.getElementById('Input_FinishPeriod');
+
+            const mealBreak = document.getElementById('MealBreakMinutes');
+
+            const annualLeave = document.getElementById('AnnualLeaveHours');
+            const sickLeave = document.getElementById('SickLeaveHours');
+            const longServiceLeave = document.getElementById('LongServiceLeaveHours');
+            const tilTaken = document.getElementById('TimeInLieuTakenHours');
+            const tilTopUpHelp = document.getElementById('tilTopUpHelp');
+
+            const yesButton = document.getElementById('publicHolidayYesButton');
+            const noButton = document.getElementById('publicHolidayNoButton');
+
+            const modalElement = document.getElementById('publicHolidayModal');
+            const holidayModal = new bootstrap.Modal(modalElement);
+
+            let suppressChangeHandler = false;
+
+            function setTimeInputsEnabled(enabled) {
+                startHour.disabled = !enabled;
+                startMinute.disabled = !enabled;
+                startPeriod.disabled = !enabled;
+
+                finishHour.disabled = !enabled;
+                finishMinute.disabled = !enabled;
+                finishPeriod.disabled = !enabled;
+
+                mealBreak.disabled = !enabled;
+            }
+
+            function clearTimeInputs() {
+                startHour.value = '';
+                startMinute.value = '';
+                startPeriod.value = '';
+
+                finishHour.value = '';
+                finishMinute.value = '';
+                finishPeriod.value = '';
+
+                mealBreak.value = '';
+            }
+
+            function parseDecimalValue(element) {
+                if (!element || element.value === '') {
+                    return 0;
+                }
+
+                const parsed = parseFloat(element.value);
+                return Number.isNaN(parsed) ? 0 : parsed;
+            }
+
+            function getHour24(hourValue, periodValue) {
+                if (!hourValue || !periodValue) {
+                    return null;
+                }
+
+                let hour = parseInt(hourValue, 10);
+                if (Number.isNaN(hour) || hour < 1 || hour > 12) {
+                    return null;
+                }
+
+                const period = periodValue.toUpperCase();
+                hour = hour % 12;
+
+                if (period === 'PM') {
+                    hour += 12;
+                }
+
+                return hour;
+            }
+
+            function calculateWorkedHours() {
+                if (!startHour.value || !startMinute.value || !startPeriod.value ||
+                    !finishHour.value || !finishMinute.value || !finishPeriod.value) {
+                    return 0;
+                }
+
+                const startHour24 = getHour24(startHour.value, startPeriod.value);
+                const finishHour24 = getHour24(finishHour.value, finishPeriod.value);
+
+                if (startHour24 === null || finishHour24 === null) {
+                    return 0;
+                }
+
+                const startMinutes = (startHour24 * 60) + parseInt(startMinute.value, 10);
+                const finishMinutes = (finishHour24 * 60) + parseInt(finishMinute.value, 10);
+
+                if (finishMinutes <= startMinutes) {
+                    return 0;
+                }
+
+                let totalMinutes = finishMinutes - startMinutes;
+
+                if (mealBreak.value) {
+                    totalMinutes -= parseInt(mealBreak.value, 10);
+                }
+
+                if (totalMinutes < 0) {
+                    totalMinutes = 0;
+                }
+
+                return totalMinutes / 60.0;
+            }
+
+            function applySourceRules() {
+                const workedHours = calculateWorkedHours();
+                const hasWorkedTimes = workedHours > 0;
+
+                const annual = parseDecimalValue(annualLeave);
+                const sick = parseDecimalValue(sickLeave);
+                const longService = parseDecimalValue(longServiceLeave);
+                const til = parseDecimalValue(tilTaken);
+
+                const hasBlockingNonWorkedHours = annual > 0 || sick > 0 || longService > 0 || (!hasWorkedTimes && til > 0);
+
+                if (publicHolidayCheckbox.checked && publicHolidayWorkedHidden.value === 'false') {
+                    setTimeInputsEnabled(false);
+                } else {
+                    setTimeInputsEnabled(!hasBlockingNonWorkedHours);
+                }
+
+                if (hasWorkedTimes) {
+                    annualLeave.disabled = true;
+                    sickLeave.disabled = true;
+                    longServiceLeave.disabled = true;
+
+                    if (workedHours >= standardDayHours) {
+                        tilTaken.disabled = true;
+                        tilTaken.max = '0';
+                        tilTopUpHelp.textContent = 'Worked hours are already 8 or more, so TIL Taken cannot be added.';
+                    } else {
+                        const topUp = Math.max(0, standardDayHours - workedHours);
+                        tilTaken.disabled = false;
+                        tilTaken.max = topUp.toFixed(2);
+                        tilTopUpHelp.textContent = `You can add up to ${topUp.toFixed(2)} hours of TIL to bring the day to ${standardDayHours.toFixed(2)} hours.`;
+                    }
+                } else {
+                    annualLeave.disabled = false;
+                    sickLeave.disabled = false;
+                    longServiceLeave.disabled = false;
+                    tilTaken.disabled = false;
+                    tilTaken.removeAttribute('max');
+                    tilTopUpHelp.textContent = `TIL can only be used to top worked hours up to ${standardDayHours.toFixed(2)} hours.`;
+                }
+            }
+
+            function applyPublicHolidayState() {
+                const isPublicHoliday = publicHolidayCheckbox.checked;
+                const worked = publicHolidayWorkedHidden.value === 'true';
+
+                if (!isPublicHoliday) {
+                    applySourceRules();
+                    return;
+                }
+
+                if (worked) {
+                    applySourceRules();
+                } else {
+                    setTimeInputsEnabled(false);
+                    clearTimeInputs();
+                }
+            }
+
+            publicHolidayCheckbox.addEventListener('change', function () {
+                if (suppressChangeHandler) {
+                    return;
+                }
+
+                if (publicHolidayCheckbox.checked) {
+                    holidayModal.show();
+                } else {
+                    publicHolidayWorkedHidden.value = 'true';
+                    applySourceRules();
+                }
+            });
+
+            yesButton.addEventListener('click', function () {
+                publicHolidayWorkedHidden.value = 'true';
+                applySourceRules();
+                holidayModal.hide();
+            });
+
+            noButton.addEventListener('click', function () {
+                publicHolidayWorkedHidden.value = 'false';
+                setTimeInputsEnabled(false);
+                clearTimeInputs();
+                applySourceRules();
+                holidayModal.hide();
+            });
+
+            modalElement.addEventListener('hidden.bs.modal', function () {
+                if (!publicHolidayCheckbox.checked) {
+                    return;
+                }
+
+                const answered = publicHolidayWorkedHidden.value === 'true' || publicHolidayWorkedHidden.value === 'false';
+                if (!answered) {
+                    suppressChangeHandler = true;
+                    publicHolidayCheckbox.checked = false;
+                    publicHolidayWorkedHidden.value = 'true';
+                    applySourceRules();
+                    suppressChangeHandler = false;
+                }
+            });
+
+            [startHour, startMinute, startPeriod, finishHour, finishMinute, finishPeriod, mealBreak, annualLeave, sickLeave, longServiceLeave, tilTaken]
+                .forEach(element => {
+                    if (element) {
+                        element.addEventListener('change', applySourceRules);
+                        element.addEventListener('input', applySourceRules);
+                    }
+                });
+
+            applyPublicHolidayState();
+            applySourceRules();
+        })();
+    </script>
+}

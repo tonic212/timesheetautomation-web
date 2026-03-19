@@ -1,0 +1,188 @@
+﻿@page
+@model TimesheetAutomation.Web.Pages.SummaryModel
+@{
+    ViewData["Title"] = "Fortnight Summary";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">Fortnight Summary</h1>
+            <div class="text-muted">
+                @Model.StartDate.ToString("dddd, dd MMM yyyy") - @Model.EndDate.ToString("dddd, dd MMM yyyy")
+            </div>
+        </div>
+        <a asp-page="/Index" class="btn btn-outline-secondary">Back to Dashboard</a>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="alert alert-info">@Model.StatusMessage</div>
+    }
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Day</th>
+                            <th>Status</th>
+                            <th>Start Time</th>
+                            <th>Finish Time</th>
+                            <th>Meal Break</th>
+                            <th style="width: 110px;">Quick Save</th>
+                            <th style="width: 100px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var day in Model.Days)
+                        {
+                            <tr>
+                                <form method="post" asp-page-handler="QuickSave">
+                                <td>
+                                    @day.WorkDate.ToString("yyyy-MM-dd")
+                                    <input type="hidden" name="QuickEdit.WorkDate" value="@day.WorkDate.ToString("yyyy-MM-dd")" />
+                                </td>
+                                <td>@day.DayName</td>
+                                <td>
+                                    @if (day.HasEntry)
+                                    {
+                                        <span class="badge bg-success">Saved</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">Missing</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <select name="QuickEdit.StartHour" class="form-select form-select-sm">
+                                            <option value=""></option>
+                                            @foreach (var option in Model.HourOptions)
+                                            {
+                                                if (option.Value == day.StartHourText)
+                                                {
+                                                    <option value="@option.Value" selected>@option.Text</option>
+                                                }
+                                                else
+                                                {
+                                                    <option value="@option.Value">@option.Text</option>
+                                                }
+                                            }
+                                        </select>
+                                        <select name="QuickEdit.StartMinute" class="form-select form-select-sm">
+                                            <option value=""></option>
+                                            @foreach (var option in Model.MinuteOptions)
+                                            {
+                                                if (option.Value == day.StartMinuteText)
+                                                {
+                                                    <option value="@option.Value" selected>@option.Text</option>
+                                                }
+                                                else
+                                                {
+                                                    <option value="@option.Value">@option.Text</option>
+                                                }
+                                            }
+                                        </select>
+                                        <select name="QuickEdit.StartPeriod" class="form-select form-select-sm">
+                                            <option value=""></option>
+                                            @foreach (var option in Model.PeriodOptions)
+                                            {
+                                                if (option.Value == day.StartPeriodText)
+                                                {
+                                                    <option value="@option.Value" selected>@option.Text</option>
+                                                }
+                                                else
+                                                {
+                                                    <option value="@option.Value">@option.Text</option>
+                                                }
+                                            }
+                                        </select>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <select name="QuickEdit.FinishHour" class="form-select form-select-sm">
+                                            <option value=""></option>
+                                            @foreach (var option in Model.HourOptions)
+                                            {
+                                                if (option.Value == day.FinishHourText)
+                                                {
+                                                    <option value="@option.Value" selected>@option.Text</option>
+                                                }
+                                                else
+                                                {
+                                                    <option value="@option.Value">@option.Text</option>
+                                                }
+                                            }
+                                        </select>
+                                        <select name="QuickEdit.FinishMinute" class="form-select form-select-sm">
+                                            <option value=""></option>
+                                            @foreach (var option in Model.MinuteOptions)
+                                            {
+                                                if (option.Value == day.FinishMinuteText)
+                                                {
+                                                    <option value="@option.Value" selected>@option.Text</option>
+                                                }
+                                                else
+                                                {
+                                                    <option value="@option.Value">@option.Text</option>
+                                                }
+                                            }
+                                        </select>
+                                        <select name="QuickEdit.FinishPeriod" class="form-select form-select-sm">
+                                            <option value=""></option>
+                                            @foreach (var option in Model.PeriodOptions)
+                                            {
+                                                if (option.Value == day.FinishPeriodText)
+                                                {
+                                                    <option value="@option.Value" selected>@option.Text</option>
+                                                }
+                                                else
+                                                {
+                                                    <option value="@option.Value">@option.Text</option>
+                                                }
+                                            }
+                                        </select>
+                                    </div>
+                                </td>
+                                <td>
+                                    <select name="QuickEdit.MealBreakMinutes" class="form-select form-select-sm">
+                                        @foreach (var option in Model.MealBreakOptions)
+                                        {
+                                            if (int.TryParse(option.Value, out var optionMinutes) && day.MealBreakMinutes == optionMinutes)
+                                            {
+                                                <option value="@option.Value" selected>@option.Text</option>
+                                            }
+                                            else if (string.IsNullOrWhiteSpace(option.Value) && !day.MealBreakMinutes.HasValue)
+                                            {
+                                                <option value="@option.Value" selected>@option.Text</option>
+                                            }
+                                            else
+                                            {
+                                                <option value="@option.Value">@option.Text</option>
+                                            }
+                                        }
+                                    </select>
+                                </td>
+                                <td>
+                                    <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                                </td>
+                                <td>
+                                    <a asp-page="/Entry"
+                                       asp-route-date="@day.WorkDate.ToString("yyyy-MM-dd")"
+                                       class="btn btn-sm btn-outline-secondary">
+                                        Open
+                                    </a>
+                                </td>
+                                </form>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

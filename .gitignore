@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+docker-data/App_Data/
+docker-data/Exports/
+docker-data/Templates/*
+!docker-data/Templates/.gitkeep
+
+appsettings.Development.json
+timesheetautomation-web.tar

@@ -1,0 +1,390 @@
+using ClosedXML.Excel;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using TimesheetAutomation.Web.Data;
+using TimesheetAutomation.Web.Models;
+using TimesheetAutomation.Web.Options;
+
+namespace TimesheetAutomation.Web.Services;
+
+public sealed class FortnightExportService : IFortnightExportService
+{
+	private readonly ApplicationDbContext _dbContext;
+	private readonly IFortnightSummaryService _fortnightSummaryService;
+	private readonly ExcelExportOptions _options;
+	private readonly IWebHostEnvironment _environment;
+
+	public FortnightExportService(
+		ApplicationDbContext dbContext,
+		IFortnightSummaryService fortnightSummaryService,
+		IOptions<ExcelExportOptions> options,
+		IWebHostEnvironment environment)
+	{
+		_dbContext = dbContext;
+		_fortnightSummaryService = fortnightSummaryService;
+		_options = options.Value;
+		_environment = environment;
+	}
+
+	public async Task<FortnightExport> GenerateCurrentFortnightAsync(Guid userId, CancellationToken cancellationToken)
+	{
+		ApplicationUser user = await _dbContext.Users
+			.SingleAsync(x => x.Id == userId, cancellationToken);
+
+		DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+		(DateOnly startDate, DateOnly endDate) = _fortnightSummaryService.GetCurrentFortnightRange(today);
+
+		List<DailyTimeEntry> entries = await _dbContext.DailyTimeEntries
+			.Where(x => x.UserId == userId && x.WorkDate >= startDate && x.WorkDate <= endDate)
+			.OrderBy(x => x.WorkDate)
+			.ToListAsync(cancellationToken);
+
+		string templateFullPath = GetAbsolutePath(_options.TemplatePath);
+		if (!File.Exists(templateFullPath))
+		{
+			throw new FileNotFoundException(
+				$"Excel template was not found at '{templateFullPath}'. " +
+				$"Copy your master workbook to that location before exporting.");
+		}
+
+		string userExportFolder = Path.Combine(GetAbsolutePath(_options.ExportRootFolder), userId.ToString("N"));
+		Directory.CreateDirectory(userExportFolder);
+
+		DateTime utcNow = DateTime.UtcNow;
+		string safeUserName = BuildSafeFileNameSegment(user.DisplayName);
+		string timestamp = utcNow.ToLocalTime().ToString("yyyy_MM_dd_HH_mm_ss");
+		string fileName = $"{safeUserName}_{endDate:yyyy_MM_dd}_{timestamp}.xlsx";
+		string outputFullPath = Path.Combine(userExportFolder, fileName);
+
+		FortnightExport? existingExport = await _dbContext.FortnightExports
+			.SingleOrDefaultAsync(
+				x => x.UserId == userId &&
+					 x.PeriodStartDate == startDate &&
+					 x.PeriodEndDate == endDate,
+				cancellationToken);
+
+		if (existingExport is not null && !string.IsNullOrWhiteSpace(existingExport.FilePath) && File.Exists(existingExport.FilePath))
+		{
+			File.Delete(existingExport.FilePath);
+		}
+
+		File.Copy(templateFullPath, outputFullPath, overwrite: true);
+
+		using (XLWorkbook workbook = new(outputFullPath))
+		{
+			IXLWorksheet timeSheet = workbook.Worksheet(_options.TimeSheetSheetName);
+			IXLWorksheet tilBalanceSheet = workbook.Worksheet(_options.TilBalanceSheetName);
+
+			ClearWritableEntryCells(timeSheet);
+			FillTimeSheet(timeSheet, startDate, entries);
+
+			ValidateTimeSheetFormulas(timeSheet);
+
+			AppendTilBalanceRows(tilBalanceSheet, entries);
+
+			workbook.Save();
+		}
+
+		if (existingExport is null)
+		{
+			existingExport = new FortnightExport
+			{
+				UserId = userId,
+				PeriodStartDate = startDate,
+				PeriodEndDate = endDate,
+				FilePath = outputFullPath,
+				FileName = fileName,
+				CreatedUtc = utcNow
+			};
+
+			_dbContext.FortnightExports.Add(existingExport);
+		}
+		else
+		{
+			existingExport.FilePath = outputFullPath;
+			existingExport.FileName = fileName;
+			existingExport.CreatedUtc = utcNow;
+		}
+
+		await _dbContext.SaveChangesAsync(cancellationToken);
+
+		return existingExport;
+	}
+
+	public async Task<IReadOnlyList<FortnightExport>> GetExportsAsync(Guid userId, CancellationToken cancellationToken)
+	{
+		return await _dbContext.FortnightExports
+			.Where(x => x.UserId == userId)
+			.OrderByDescending(x => x.CreatedUtc)
+			.ToListAsync(cancellationToken);
+	}
+
+	public async Task<FortnightExport?> GetExportByIdAsync(Guid userId, Guid exportId, CancellationToken cancellationToken)
+	{
+		return await _dbContext.FortnightExports
+			.SingleOrDefaultAsync(x => x.UserId == userId && x.Id == exportId, cancellationToken);
+	}
+
+	private void FillTimeSheet(IXLWorksheet worksheet, DateOnly startDate, List<DailyTimeEntry> entries)
+	{
+		Dictionary<DateOnly, DailyTimeEntry> entryLookup = entries.ToDictionary(x => x.WorkDate);
+
+		for (int dayIndex = 0; dayIndex < _options.TimeSheetDayCount; dayIndex++)
+		{
+			DateOnly workDate = startDate.AddDays(dayIndex);
+			int row = _options.TimeSheetStartRow + dayIndex;
+
+			entryLookup.TryGetValue(workDate, out DailyTimeEntry? entry);
+
+			WriteDateCell(worksheet.Cell(row, "A"), workDate);
+			worksheet.Cell(row, "B").Value = workDate.DayOfWeek.ToString();
+
+			if (entry is null)
+			{
+				continue;
+			}
+
+			WriteClockTimeCell(worksheet.Cell(row, "C"), entry.StartTime);
+			WriteClockTimeCell(worksheet.Cell(row, "D"), entry.FinishTime);
+			WriteBreakMinutesCell(worksheet.Cell(row, "E"), entry.MealBreakMinutes);
+
+			WriteHourDurationCell(worksheet.Cell(row, "F"), entry.PublicHolidayHours);
+			WriteHourDurationCell(worksheet.Cell(row, "G"), entry.TimeInLieuAccruedHours);
+
+			WriteHourDurationCell(worksheet.Cell(row, "I"), entry.AnnualLeaveHours);
+			WriteHourDurationCell(worksheet.Cell(row, "J"), entry.SickLeaveHours);
+			WriteHourDurationCell(worksheet.Cell(row, "K"), entry.LongServiceLeaveHours);
+			WriteHourDurationCell(worksheet.Cell(row, "L"), entry.TimeInLieuTakenHours);
+
+			WriteWorkedDayCommentCell(worksheet.Cell(row, "O"), entry);
+		}
+	}
+
+	private void AppendTilBalanceRows(IXLWorksheet worksheet, List<DailyTimeEntry> entries)
+	{
+		int nextRow = FindNextTilBalanceRow(worksheet);
+
+		foreach (DailyTimeEntry entry in entries.OrderBy(x => x.WorkDate))
+		{
+			if (entry.TimeInLieuAccruedHours > 0 || entry.PublicHolidayHours > 0)
+			{
+				WriteTilBalanceRow(
+					worksheet,
+					nextRow,
+					entry.WorkDate,
+					string.IsNullOrWhiteSpace(entry.Notes) ? "TIL Accrued" : entry.Notes!,
+					entry.TimeInLieuAccruedHours > 0 ? entry.TimeInLieuAccruedHours : entry.PublicHolidayHours);
+
+				nextRow++;
+			}
+
+			if (entry.TimeInLieuTakenHours > 0)
+			{
+				WriteTilBalanceRow(
+					worksheet,
+					nextRow,
+					entry.WorkDate,
+					string.IsNullOrWhiteSpace(entry.Notes) ? "TIL Taken" : entry.Notes!,
+					-entry.TimeInLieuTakenHours);
+
+				nextRow++;
+			}
+		}
+	}
+
+	private int FindNextTilBalanceRow(IXLWorksheet worksheet)
+	{
+		int row = _options.TilBalanceStartRow;
+
+		while (!IsTilBalanceRowEmpty(worksheet, row))
+		{
+			row++;
+		}
+
+		return row;
+	}
+
+	private static bool IsTilBalanceRowEmpty(IXLWorksheet worksheet, int row)
+	{
+		return worksheet.Cell(row, "A").IsEmpty()
+			&& worksheet.Cell(row, "B").IsEmpty()
+			&& worksheet.Cell(row, "C").IsEmpty()
+			&& worksheet.Cell(row, "D").IsEmpty();
+	}
+
+	private static void WriteTilBalanceRow(IXLWorksheet worksheet, int row, DateOnly workDate, string description, decimal hours)
+	{
+		WriteDateCell(worksheet.Cell(row, "A"), workDate);
+		worksheet.Cell(row, "B").Value = description;
+		WriteSignedHourDurationCell(worksheet.Cell(row, "C"), hours);
+
+		if (!worksheet.Cell(row, "D").HasFormula)
+		{
+			IXLCell previousBalanceCell = worksheet.Cell(row - 1, "D");
+			if (!previousBalanceCell.IsEmpty())
+			{
+				worksheet.Cell(row, "D").FormulaA1 = $"D{row - 1}+C{row}";
+			}
+		}
+	}
+
+	private void ValidateTimeSheetFormulas(IXLWorksheet worksheet)
+	{
+		int startRow = _options.TimeSheetStartRow;
+		int endRow = _options.TimeSheetStartRow + _options.TimeSheetDayCount - 1;
+
+		List<string> missingFormulaCells = new();
+
+		for (int row = startRow; row <= endRow; row++)
+		{
+			string dayName = worksheet.Cell(row, "B").GetString().Trim();
+
+			bool isWeekend =
+				string.Equals(dayName, "Saturday", StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(dayName, "Sunday", StringComparison.OrdinalIgnoreCase);
+
+			if (isWeekend)
+			{
+				continue;
+			}
+
+			if (!worksheet.Cell(row, "H").HasFormula)
+			{
+				missingFormulaCells.Add($"H{row}");
+			}
+
+			if (!worksheet.Cell(row, "M").HasFormula)
+			{
+				missingFormulaCells.Add($"M{row}");
+			}
+		}
+
+		if (missingFormulaCells.Count > 0)
+		{
+			throw new InvalidOperationException(
+				$"Export validation failed. Missing formulas in: {string.Join(", ", missingFormulaCells)}");
+		}
+	}
+
+	private void ClearWritableEntryCells(IXLWorksheet worksheet)
+	{
+		for (int row = _options.TimeSheetStartRow; row < _options.TimeSheetStartRow + _options.TimeSheetDayCount; row++)
+		{
+			worksheet.Cell(row, "A").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "B").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "C").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "D").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "E").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "F").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "G").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "I").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "J").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "K").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "L").Clear(XLClearOptions.Contents);
+			worksheet.Cell(row, "O").Clear(XLClearOptions.Contents);
+		}
+	}
+
+	private static void WriteDateCell(IXLCell cell, DateOnly value)
+	{
+		cell.Value = value.ToDateTime(TimeOnly.MinValue);
+		cell.Style.DateFormat.Format = "d-MMM-yy";
+	}
+
+	private static void WriteClockTimeCell(IXLCell cell, TimeOnly? value)
+	{
+		if (!value.HasValue)
+		{
+			cell.Clear(XLClearOptions.Contents);
+			return;
+		}
+
+		cell.Value = value.Value.ToTimeSpan();
+		cell.Style.DateFormat.Format = "h:mm:ss";
+	}
+
+	private static void WriteBreakMinutesCell(IXLCell cell, int? mealBreakMinutes)
+	{
+		if (!mealBreakMinutes.HasValue || mealBreakMinutes.Value <= 0)
+		{
+			cell.Clear(XLClearOptions.Contents);
+			return;
+		}
+
+		cell.Value = TimeSpan.FromMinutes(mealBreakMinutes.Value);
+		cell.Style.DateFormat.Format = "h:mm:ss";
+	}
+
+	private static void WriteHourDurationCell(IXLCell cell, decimal hours)
+	{
+		if (hours == 0)
+		{
+			cell.Clear(XLClearOptions.Contents);
+			return;
+		}
+
+		cell.Value = TimeSpan.FromHours((double)hours);
+		cell.Style.DateFormat.Format = "h:mm:ss";
+	}
+
+	private static void WriteSignedHourDurationCell(IXLCell cell, decimal hours)
+	{
+		if (hours == 0)
+		{
+			cell.Clear(XLClearOptions.Contents);
+			return;
+		}
+
+		if (hours > 0)
+		{
+			cell.Value = TimeSpan.FromHours((double)hours);
+		}
+		else
+		{
+			cell.Value = hours / 24m;
+		}
+
+		cell.Style.NumberFormat.Format = "[h]:mm:ss";
+	}
+
+	private static void WriteWorkedDayCommentCell(IXLCell cell, DailyTimeEntry entry)
+	{
+		bool shouldWriteComment =
+			(entry.StartTime.HasValue && entry.FinishTime.HasValue) ||
+			entry.SickLeaveHours > 0 ||
+			entry.AnnualLeaveHours > 0 ||
+			entry.LongServiceLeaveHours > 0;
+
+		if (!shouldWriteComment || string.IsNullOrWhiteSpace(entry.Notes))
+		{
+			cell.Clear(XLClearOptions.Contents);
+			return;
+		}
+
+		cell.Value = entry.Notes.Trim();
+	}
+
+	private string GetAbsolutePath(string relativeOrAbsolutePath)
+	{
+		if (Path.IsPathRooted(relativeOrAbsolutePath))
+		{
+			return relativeOrAbsolutePath;
+		}
+
+		return Path.Combine(_environment.ContentRootPath, relativeOrAbsolutePath);
+	}
+
+	private static string BuildSafeFileNameSegment(string value)
+	{
+		string trimmed = string.IsNullOrWhiteSpace(value) ? "Timesheet" : value.Trim();
+
+		foreach (char invalidChar in Path.GetInvalidFileNameChars())
+		{
+			trimmed = trimmed.Replace(invalidChar, '_');
+		}
+
+		trimmed = trimmed.Replace(' ', '_');
+
+		return trimmed;
+	}
+}
