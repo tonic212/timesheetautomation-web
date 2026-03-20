@@ -9,8 +9,6 @@ public sealed class FortnightExport
     [Required]
     public Guid UserId { get; set; }
 
-    public ApplicationUser User { get; set; } = null!;
-
     [Required]
     public DateOnly PeriodStartDate { get; set; }
 
@@ -18,11 +16,11 @@ public sealed class FortnightExport
     public DateOnly PeriodEndDate { get; set; }
 
     [Required]
-    [MaxLength(500)]
+    [MaxLength(260)]
     public string FilePath { get; set; } = string.Empty;
 
     [Required]
-    [MaxLength(255)]
+    [MaxLength(260)]
     public string FileName { get; set; } = string.Empty;
 
     [Required]

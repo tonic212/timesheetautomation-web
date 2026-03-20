@@ -8,11 +8,11 @@ namespace TimesheetAutomation.Web.Services;
 
 public sealed class TimeEntryService : ITimeEntryService
 {
-    private readonly ApplicationDbContext _dbContext;
+    private readonly AppDbContext _dbContext;
     private readonly PayPeriodOptions _payPeriodOptions;
 
     public TimeEntryService(
-        ApplicationDbContext dbContext,
+        AppDbContext dbContext,
         IOptions<PayPeriodOptions> payPeriodOptions)
     {
         _dbContext = dbContext;
@@ -63,10 +63,22 @@ public sealed class TimeEntryService : ITimeEntryService
         ValidateBusinessRules(input);
 
         decimal netWorkedHours = CalculateNetWorkedHours(input.StartTime, input.FinishTime, input.MealBreakMinutes);
-        decimal calculatedPublicHolidayHours = CalculatePublicHolidayHours(input.IsPublicHoliday, input.PublicHolidayWorked, input.StartTime, input.FinishTime, netWorkedHours);
-        decimal calculatedTilAccruedHours = CalculateTilAccruedHours(input.IsPublicHoliday, input.PublicHolidayWorked, input.StartTime, input.FinishTime, netWorkedHours);
+        decimal calculatedPublicHolidayHours = CalculatePublicHolidayHours(
+            input.IsPublicHoliday,
+            input.PublicHolidayWorked,
+            input.StartTime,
+            input.FinishTime,
+            netWorkedHours);
+
+        decimal calculatedTilAccruedHours = CalculateTilAccruedHours(
+            input.IsPublicHoliday,
+            input.PublicHolidayWorked,
+            input.StartTime,
+            input.FinishTime,
+            netWorkedHours);
 
         DailyTimeEntry? existingEntry = await _dbContext.DailyTimeEntries
+            .Include(x => x.TilLedgerEntries)
             .SingleOrDefaultAsync(
                 x => x.UserId == userId && x.WorkDate == input.WorkDate,
                 cancellationToken);
@@ -94,6 +106,8 @@ public sealed class TimeEntryService : ITimeEntryService
 
             _dbContext.DailyTimeEntries.Add(newEntry);
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            await SyncTilLedgerAsync(newEntry, cancellationToken);
 
             List<TimeEntryAudit> createAudits = BuildCreateAudits(userId, newEntry);
             if (createAudits.Count > 0)
@@ -139,6 +153,8 @@ public sealed class TimeEntryService : ITimeEntryService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        await SyncTilLedgerAsync(existingEntry, cancellationToken);
+
         if (audits.Count > 0)
         {
             _dbContext.TimeEntryAudits.AddRange(audits);
@@ -162,6 +178,87 @@ public sealed class TimeEntryService : ITimeEntryService
             .Where(x => x.UserId == userId && x.DailyTimeEntryId == entry.Id)
             .OrderByDescending(x => x.ChangedUtc)
             .ToListAsync(cancellationToken);
+    }
+
+    private async Task SyncTilLedgerAsync(DailyTimeEntry entry, CancellationToken cancellationToken)
+    {
+        List<TilLedgerEntry> existingLedgerRows = await _dbContext.TilLedgerEntries
+            .Where(x => x.SourceKind == "DailyEntry" && x.SourceDailyTimeEntryId == entry.Id)
+            .ToListAsync(cancellationToken);
+
+        TilLedgerEntry? accruedRow = existingLedgerRows
+            .SingleOrDefault(x => string.Equals(x.EntryType, "Accrued", StringComparison.OrdinalIgnoreCase));
+
+        TilLedgerEntry? takenRow = existingLedgerRows
+            .SingleOrDefault(x => string.Equals(x.EntryType, "Taken", StringComparison.OrdinalIgnoreCase));
+
+        string? description = NormalizeNotes(entry.Notes);
+
+        if (entry.TimeInLieuAccruedHours > 0)
+        {
+            if (accruedRow is null)
+            {
+                accruedRow = new TilLedgerEntry
+                {
+                    UserId = entry.UserId,
+                    SourceDailyTimeEntryId = entry.Id,
+                    SourceKind = "DailyEntry",
+                    WorkDate = entry.WorkDate,
+                    EntryType = "Accrued",
+                    Hours = entry.TimeInLieuAccruedHours,
+                    Description = description,
+                    CreatedUtc = DateTime.UtcNow,
+                    LastModifiedUtc = DateTime.UtcNow
+                };
+
+                _dbContext.TilLedgerEntries.Add(accruedRow);
+            }
+            else
+            {
+                accruedRow.WorkDate = entry.WorkDate;
+                accruedRow.Hours = entry.TimeInLieuAccruedHours;
+                accruedRow.Description = description;
+                accruedRow.LastModifiedUtc = DateTime.UtcNow;
+            }
+        }
+        else if (accruedRow is not null)
+        {
+            _dbContext.TilLedgerEntries.Remove(accruedRow);
+        }
+
+        if (entry.TimeInLieuTakenHours > 0)
+        {
+            if (takenRow is null)
+            {
+                takenRow = new TilLedgerEntry
+                {
+                    UserId = entry.UserId,
+                    SourceDailyTimeEntryId = entry.Id,
+                    SourceKind = "DailyEntry",
+                    WorkDate = entry.WorkDate,
+                    EntryType = "Taken",
+                    Hours = entry.TimeInLieuTakenHours,
+                    Description = description,
+                    CreatedUtc = DateTime.UtcNow,
+                    LastModifiedUtc = DateTime.UtcNow
+                };
+
+                _dbContext.TilLedgerEntries.Add(takenRow);
+            }
+            else
+            {
+                takenRow.WorkDate = entry.WorkDate;
+                takenRow.Hours = entry.TimeInLieuTakenHours;
+                takenRow.Description = description;
+                takenRow.LastModifiedUtc = DateTime.UtcNow;
+            }
+        }
+        else if (takenRow is not null)
+        {
+            _dbContext.TilLedgerEntries.Remove(takenRow);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private void ValidateBusinessRules(TimeEntryInputModel input)
@@ -204,12 +301,9 @@ public sealed class TimeEntryService : ITimeEntryService
             throw new InvalidOperationException("Only one non-worked time source can be used for a day.");
         }
 
-        if (input.IsPublicHoliday && input.PublicHolidayWorked)
+        if (input.IsPublicHoliday && input.PublicHolidayWorked && !hasWorkedTimes)
         {
-            if (!hasWorkedTimes)
-            {
-                throw new InvalidOperationException("Worked public holiday entries require both start and finish times.");
-            }
+            throw new InvalidOperationException("Worked public holiday entries require both start and finish times.");
         }
 
         if (input.IsPublicHoliday && !input.PublicHolidayWorked)

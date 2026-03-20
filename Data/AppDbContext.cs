@@ -3,14 +3,12 @@ using TimesheetAutomation.Web.Models;
 
 namespace TimesheetAutomation.Web.Data;
 
-public sealed class ApplicationDbContext : DbContext
+public sealed class AppDbContext : DbContext
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
     {
     }
-
-    public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
 
     public DbSet<DailyTimeEntry> DailyTimeEntries => Set<DailyTimeEntry>();
 
@@ -23,18 +21,6 @@ public sealed class ApplicationDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<ApplicationUser>()
-            .HasIndex(x => x.Email)
-            .IsUnique();
-
-        modelBuilder.Entity<ApplicationUser>()
-            .HasIndex(x => x.NormalizedEmail)
-            .IsUnique();
-
-        modelBuilder.Entity<ApplicationUser>()
-            .HasIndex(x => x.GoogleSubject)
-            .IsUnique();
 
         modelBuilder.Entity<DailyTimeEntry>()
             .HasIndex(x => new { x.UserId, x.WorkDate })

@@ -15,26 +15,27 @@ public sealed class ApplicationUser
     public string NormalizedEmail { get; set; } = string.Empty;
 
     [Required]
-    [MaxLength(256)]
+    [MaxLength(200)]
     public string DisplayName { get; set; } = string.Empty;
 
     [Required]
-    [MaxLength(100)]
-    public string HostedDomain { get; set; } = string.Empty;
+    [MaxLength(500)]
+    public string PasswordHash { get; set; } = string.Empty;
 
     [Required]
-    [MaxLength(100)]
+    [MaxLength(200)]
+    public string HostedDomain { get; set; } = "chemwatch.net";
+
+    [Required]
+    [MaxLength(200)]
     public string GoogleSubject { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;
 
-    public bool IsAdmin { get; set; } = false;
+    public bool IsAdmin { get; set; }
 
+    [Required]
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
     public DateTime? LastLoginUtc { get; set; }
-
-    public ICollection<DailyTimeEntry> DailyTimeEntries { get; set; } = new List<DailyTimeEntry>();
-
-    public ICollection<FortnightExport> FortnightExports { get; set; } = new List<FortnightExport>();
 }

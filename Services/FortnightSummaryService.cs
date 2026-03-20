@@ -8,15 +8,33 @@ namespace TimesheetAutomation.Web.Services;
 
 public sealed class FortnightSummaryService : IFortnightSummaryService
 {
-    private readonly ApplicationDbContext _dbContext;
+    private readonly AppDbContext _dbContext;
     private readonly PayPeriodOptions _payPeriodOptions;
 
     public FortnightSummaryService(
-        ApplicationDbContext dbContext,
+        AppDbContext dbContext,
         IOptions<PayPeriodOptions> payPeriodOptions)
     {
         _dbContext = dbContext;
         _payPeriodOptions = payPeriodOptions.Value;
+    }
+
+    public (DateOnly StartDate, DateOnly EndDate) GetCurrentFortnightRange(DateOnly today)
+    {
+        if (!DateOnly.TryParse(_payPeriodOptions.FortnightAnchorDate, out DateOnly anchorDate))
+        {
+            throw new InvalidOperationException("PayPeriod:FortnightAnchorDate is invalid.");
+        }
+
+        int daysDifference = today.DayNumber - anchorDate.DayNumber;
+        int fortnightOffset = daysDifference >= 0
+            ? daysDifference / 14
+            : (daysDifference - 13) / 14;
+
+        DateOnly startDate = anchorDate.AddDays(fortnightOffset * 14);
+        DateOnly endDate = startDate.AddDays(13);
+
+        return (startDate, endDate);
     }
 
     public async Task<IReadOnlyList<FortnightDayViewModel>> GetCurrentFortnightAsync(Guid userId, CancellationToken cancellationToken)
@@ -33,41 +51,21 @@ public sealed class FortnightSummaryService : IFortnightSummaryService
 
         List<FortnightDayViewModel> result = new();
 
-        for (DateOnly current = startDate; current <= endDate; current = current.AddDays(1))
+        for (DateOnly date = startDate; date <= endDate; date = date.AddDays(1))
         {
-            entryLookup.TryGetValue(current, out DailyTimeEntry? entry);
+            entryLookup.TryGetValue(date, out DailyTimeEntry? entry);
 
             result.Add(new FortnightDayViewModel
             {
-                WorkDate = current,
-                DayName = current.DayOfWeek.ToString(),
+                WorkDate = date,
+                DayName = date.DayOfWeek.ToString(),
                 HasEntry = entry is not null,
                 StartTime = entry?.StartTime,
-                FinishTime = entry?.FinishTime
+                FinishTime = entry?.FinishTime,
+                MealBreakMinutes = entry?.MealBreakMinutes
             });
         }
 
         return result;
-    }
-
-    public (DateOnly StartDate, DateOnly EndDate) GetCurrentFortnightRange(DateOnly today)
-    {
-        if (!DateOnly.TryParse(_payPeriodOptions.FortnightAnchorDate, out DateOnly anchorDate))
-        {
-            anchorDate = new DateOnly(2022, 12, 29);
-        }
-
-        int daysSinceAnchor = today.DayNumber - anchorDate.DayNumber;
-        int fortnightOffset = Math.DivRem(daysSinceAnchor, 14, out int remainder);
-
-        if (daysSinceAnchor < 0 && remainder != 0)
-        {
-            fortnightOffset--;
-        }
-
-        DateOnly startDate = anchorDate.AddDays(fortnightOffset * 14);
-        DateOnly endDate = startDate.AddDays(13);
-
-        return (startDate, endDate);
     }
 }

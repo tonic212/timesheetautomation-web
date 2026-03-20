@@ -16,10 +16,8 @@ public sealed class TimeEntryAudit
     [MaxLength(100)]
     public string FieldName { get; set; } = string.Empty;
 
-    [MaxLength(200)]
     public string? OldValue { get; set; }
 
-    [MaxLength(200)]
     public string? NewValue { get; set; }
 
     [Required]

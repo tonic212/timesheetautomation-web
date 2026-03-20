@@ -7,77 +7,15 @@ using TimesheetAutomation.Web.Data;
 
 #nullable disable
 
-namespace TimesheetAutomation.Web.Migrations
+namespace TimesheetAutomation.Web.Migrations.App
 {
-    [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [DbContext(typeof(AppDbContext))]
+    partial class AppDbContextModelSnapshot : ModelSnapshot
     {
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.14");
-
-            modelBuilder.Entity("TimesheetAutomation.Web.Models.ApplicationUser", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("GoogleSubject")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("HostedDomain")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsAdmin")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("LastLoginUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("NormalizedEmail")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PasswordHash")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Email")
-                        .IsUnique();
-
-                    b.HasIndex("GoogleSubject")
-                        .IsUnique();
-
-                    b.HasIndex("NormalizedEmail")
-                        .IsUnique();
-
-                    b.ToTable("Users");
-                });
 
             modelBuilder.Entity("TimesheetAutomation.Web.Models.DailyTimeEntry", b =>
                 {
@@ -153,12 +91,12 @@ namespace TimesheetAutomation.Web.Migrations
 
                     b.Property<string>("FileName")
                         .IsRequired()
-                        .HasMaxLength(255)
+                        .HasMaxLength(260)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("FilePath")
                         .IsRequired()
-                        .HasMaxLength(500)
+                        .HasMaxLength(260)
                         .HasColumnType("TEXT");
 
                     b.Property<DateOnly>("PeriodEndDate")
@@ -244,11 +182,9 @@ namespace TimesheetAutomation.Web.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("NewValue")
-                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("OldValue")
-                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("UserId")
@@ -261,28 +197,6 @@ namespace TimesheetAutomation.Web.Migrations
                     b.ToTable("TimeEntryAudits");
                 });
 
-            modelBuilder.Entity("TimesheetAutomation.Web.Models.DailyTimeEntry", b =>
-                {
-                    b.HasOne("TimesheetAutomation.Web.Models.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("TimesheetAutomation.Web.Models.FortnightExport", b =>
-                {
-                    b.HasOne("TimesheetAutomation.Web.Models.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("TimesheetAutomation.Web.Models.TilLedgerEntry", b =>
                 {
                     b.HasOne("TimesheetAutomation.Web.Models.DailyTimeEntry", "SourceDailyTimeEntry")
@@ -290,15 +204,7 @@ namespace TimesheetAutomation.Web.Migrations
                         .HasForeignKey("SourceDailyTimeEntryId")
                         .OnDelete(DeleteBehavior.Cascade);
 
-                    b.HasOne("TimesheetAutomation.Web.Models.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.Navigation("SourceDailyTimeEntry");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TimesheetAutomation.Web.Models.DailyTimeEntry", b =>

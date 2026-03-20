@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TimesheetAutomation.Web.Data;
 
@@ -10,9 +11,11 @@ using TimesheetAutomation.Web.Data;
 namespace TimesheetAutomation.Web.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260319235026_AddLocalPasswordAuth")]
+    partial class AddLocalPasswordAuth
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.14");
@@ -177,55 +180,6 @@ namespace TimesheetAutomation.Web.Migrations
                     b.ToTable("FortnightExports");
                 });
 
-            modelBuilder.Entity("TimesheetAutomation.Web.Models.TilLedgerEntry", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("EntryType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("Hours")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<DateTime>("LastModifiedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("SourceDailyTimeEntryId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SourceKind")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateOnly>("WorkDate")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SourceDailyTimeEntryId");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("UserId", "WorkDate");
-
-                    b.ToTable("TilLedgerEntries");
-                });
-
             modelBuilder.Entity("TimesheetAutomation.Web.Models.TimeEntryAudit", b =>
                 {
                     b.Property<Guid>("Id")
@@ -281,29 +235,6 @@ namespace TimesheetAutomation.Web.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("TimesheetAutomation.Web.Models.TilLedgerEntry", b =>
-                {
-                    b.HasOne("TimesheetAutomation.Web.Models.DailyTimeEntry", "SourceDailyTimeEntry")
-                        .WithMany("TilLedgerEntries")
-                        .HasForeignKey("SourceDailyTimeEntryId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("TimesheetAutomation.Web.Models.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("SourceDailyTimeEntry");
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("TimesheetAutomation.Web.Models.DailyTimeEntry", b =>
-                {
-                    b.Navigation("TilLedgerEntries");
                 });
 #pragma warning restore 612, 618
         }

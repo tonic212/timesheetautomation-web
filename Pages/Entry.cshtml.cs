@@ -36,8 +36,11 @@ public sealed class EntryModel : PageModel
     public IReadOnlyList<TimeEntryAudit> AuditHistory { get; private set; } = Array.Empty<TimeEntryAudit>();
 
     public IReadOnlyList<SelectListItem> HourOptions { get; private set; } = Array.Empty<SelectListItem>();
+
     public IReadOnlyList<SelectListItem> MinuteOptions { get; private set; } = Array.Empty<SelectListItem>();
+
     public IReadOnlyList<SelectListItem> PeriodOptions { get; private set; } = Array.Empty<SelectListItem>();
+
     public IReadOnlyList<SelectListItem> MealBreakOptions { get; private set; } = Array.Empty<SelectListItem>();
 
     public DateOnly MinEditableDate { get; private set; }
@@ -125,7 +128,8 @@ public sealed class EntryModel : PageModel
             return Page();
         }
 
-        return RedirectToPage("/Entry", new { date = Input.WorkDate.ToString("yyyy-MM-dd") });
+        TempData["StatusMessage"] = $"Timesheet for {Input.WorkDate:dd/MM/yyyy} saved successfully.";
+        return RedirectToPage("/Index");
     }
 
     private (DateOnly MinDate, DateOnly MaxDate) GetEditableRange()
@@ -146,12 +150,13 @@ public sealed class EntryModel : PageModel
             Input.FinishHour = null;
             Input.FinishMinute = null;
             Input.FinishPeriod = null;
+            Input.MealBreakMinutes = null;
             return;
         }
 
         if (Input.StartTime.HasValue)
         {
-            SetDropdownsFromTime(Input.StartTime.Value, isStart: true);
+            SetDropdownsFromTime(Input.StartTime.Value, true);
         }
         else
         {
@@ -162,13 +167,18 @@ public sealed class EntryModel : PageModel
 
         if (Input.FinishTime.HasValue)
         {
-            SetDropdownsFromTime(Input.FinishTime.Value, isStart: false);
+            SetDropdownsFromTime(Input.FinishTime.Value, false);
         }
         else
         {
             Input.FinishHour = 5;
             Input.FinishMinute = 30;
             Input.FinishPeriod = "PM";
+        }
+
+        if (!Input.MealBreakMinutes.HasValue)
+        {
+            Input.MealBreakMinutes = 30;
         }
     }
 

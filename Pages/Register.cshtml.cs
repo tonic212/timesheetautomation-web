@@ -11,11 +11,11 @@ using TimesheetAutomation.Web.Services;
 namespace TimesheetAutomation.Web.Pages;
 
 [AllowAnonymous]
-public sealed class LoginModel : PageModel
+public sealed class RegisterModel : PageModel
 {
     private readonly IUserAuthService _userAuthService;
 
-    public LoginModel(IUserAuthService userAuthService)
+    public RegisterModel(IUserAuthService userAuthService)
     {
         _userAuthService = userAuthService;
     }
@@ -40,14 +40,16 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
-        ApplicationUser? user = await _userAuthService.ValidateCredentialsAsync(
-            Input.Email,
-            Input.Password,
-            cancellationToken);
+        (bool succeeded, string? errorMessage, ApplicationUser? user) =
+            await _userAuthService.RegisterAsync(
+                Input.DisplayName,
+                Input.Email,
+                Input.Password,
+                cancellationToken);
 
-        if (user is null)
+        if (!succeeded || user is null)
         {
-            ModelState.AddModelError(string.Empty, "Invalid email or password.");
+            ModelState.AddModelError(string.Empty, errorMessage ?? "Registration failed.");
             return Page();
         }
 
@@ -58,50 +60,47 @@ public sealed class LoginModel : PageModel
             new Claim(ClaimTypes.Email, user.Email)
         ];
 
-        if (user.IsAdmin)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, "Admin"));
-        }
-
         ClaimsIdentity identity = new(
             claims,
             CookieAuthenticationDefaults.AuthenticationScheme);
 
         ClaimsPrincipal principal = new(identity);
 
-        AuthenticationProperties properties = new()
-        {
-            IsPersistent = Input.RememberMe,
-            AllowRefresh = true
-        };
-
-        if (Input.RememberMe)
-        {
-            properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
-        }
-
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
             principal,
-            properties);
+            new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30),
+                AllowRefresh = true
+            });
 
-        TempData["StatusMessage"] = "Signed in successfully.";
-        return RedirectToPage("/Index");
+        TempData["StatusMessage"] = "Account created successfully. Please complete the welcome setup step.";
+        return RedirectToPage("/Welcome");
     }
 
     public sealed class InputModel
     {
+        [Required]
+        [Display(Name = "Display name")]
+        public string DisplayName { get; set; } = string.Empty;
+
         [Required]
         [EmailAddress]
         [Display(Name = "Email")]
         public string Email { get; set; } = string.Empty;
 
         [Required]
+        [MinLength(8)]
         [DataType(DataType.Password)]
         [Display(Name = "Password")]
         public string Password { get; set; } = string.Empty;
 
-        [Display(Name = "Remember me for 30 days")]
-        public bool RememberMe { get; set; }
+        [Required]
+        [DataType(DataType.Password)]
+        [Compare(nameof(Password))]
+        [Display(Name = "Confirm password")]
+        public string ConfirmPassword { get; set; } = string.Empty;
     }
 }

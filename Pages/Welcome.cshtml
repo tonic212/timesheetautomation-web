@@ -1,0 +1,48 @@
+﻿@page
+@model TimesheetAutomation.Web.Pages.WelcomeModel
+@{
+    ViewData["Title"] = "Welcome Setup";
+}
+
+<div class="container mt-5" style="max-width: 760px;">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h1 class="h3 mb-3">Welcome to Timesheet Automation</h1>
+
+            <p class="text-muted">
+                Before you start using the app, we recommend uploading your latest timesheet workbook.
+                This will import your historical <strong>TIL Balance</strong> ledger so future exports already
+                contain your carried-forward balance and reference history.
+            </p>
+
+            @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+            {
+                <div class="alert alert-success">@Model.StatusMessage</div>
+            }
+
+            <form method="post" enctype="multipart/form-data">
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                <div class="mb-3">
+                    <label asp-for="UploadFile" class="form-label">Latest Timesheet Workbook (.xlsx)</label>
+                    <input asp-for="UploadFile" class="form-control" type="file" accept=".xlsx" />
+                    <span asp-validation-for="UploadFile" class="text-danger"></span>
+                </div>
+
+                <div class="alert alert-info">
+                    The workbook must contain a sheet named <strong>TIL Balance</strong>.
+                    This step is recommended so your historical TIL ledger is preserved from the beginning.
+                </div>
+
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="submit" class="btn btn-primary">Upload and continue</button>
+                    <a asp-page="/Index" class="btn btn-outline-secondary">Skip for now</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

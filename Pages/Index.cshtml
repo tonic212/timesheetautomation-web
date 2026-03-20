@@ -8,50 +8,43 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h3 mb-1">Dashboard</h1>
-            <div class="text-muted">@Model.DisplayName (@Model.Email)</div>
+            <div class="text-muted">Welcome, @Model.DisplayName</div>
         </div>
-        <form method="post" asp-page="/Logout">
-            <button type="submit" class="btn btn-outline-secondary">Sign out</button>
-        </form>
+        <a asp-page="/Logout" class="btn btn-outline-secondary">Sign out</a>
     </div>
 
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="alert alert-success">@Model.StatusMessage</div>
+    }
+
     <div class="row g-3">
-        <div class="col-md-3">
+        <div class="col-md-4">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h2 class="h5">Today’s Entry</h2>
-                    <p class="mb-3">Create or edit your timesheet for today.</p>
-                    <a asp-page="/Entry" class="btn btn-primary">Open Today</a>
+                    <h2 class="h5">Today</h2>
+                    <p class="text-muted">Open today’s entry page.</p>
+                    <a asp-page="/Entry" class="btn btn-primary">Open today</a>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-3">
-            <div class="card shadow-sm h-100">
-                <div class="card-body">
-                    <h2 class="h5">Edit Previous Day</h2>
-                    <p class="mb-3">Quick access to the previous date entry.</p>
-                    <a asp-page="/Entry" asp-route-date="@DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd")" class="btn btn-outline-primary">Open Yesterday</a>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
+        <div class="col-md-4">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
                     <h2 class="h5">Fortnight Summary</h2>
-                    <p class="mb-3">See all days in the current fortnight and open any date.</p>
-                    <a asp-page="/Summary" class="btn btn-outline-dark">Open Summary</a>
+                    <p class="text-muted">Review and quick-edit the current fortnight.</p>
+                    <a asp-page="/Summary" class="btn btn-primary">Open summary</a>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-3">
+        <div class="col-md-4">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
                     <h2 class="h5">Exports</h2>
-                    <p class="mb-3">Generate and download your current fortnight workbook.</p>
-                    <a asp-page="/Exports" class="btn btn-outline-success">Open Exports</a>
+                    <p class="text-muted">Generate and download the current fortnight export.</p>
+                    <a asp-page="/Exports" class="btn btn-primary">Open exports</a>
                 </div>
             </div>
         </div>

@@ -10,8 +10,6 @@ public sealed class DailyTimeEntry
     [Required]
     public Guid UserId { get; set; }
 
-    public ApplicationUser User { get; set; } = null!;
-
     [Required]
     public DateOnly WorkDate { get; set; }
 
@@ -51,4 +49,6 @@ public sealed class DailyTimeEntry
 
     [Required]
     public DateTime LastModifiedUtc { get; set; } = DateTime.UtcNow;
+
+    public ICollection<TilLedgerEntry> TilLedgerEntries { get; set; } = new List<TilLedgerEntry>();
 }

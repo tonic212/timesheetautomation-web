@@ -1,9 +1,6 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.EntityFrameworkCore;
 using TimesheetAutomation.Web.Data;
-using TimesheetAutomation.Web.Models;
 using TimesheetAutomation.Web.Options;
 using TimesheetAutomation.Web.Security;
 using TimesheetAutomation.Web.Services;
@@ -14,121 +11,56 @@ builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/");
     options.Conventions.AllowAnonymousToPage("/Login");
+    options.Conventions.AllowAnonymousToPage("/Register");
     options.Conventions.AllowAnonymousToPage("/AccessDenied");
 });
 
 builder.Services.Configure<ExcelExportOptions>(builder.Configuration.GetSection("ExcelExport"));
 builder.Services.Configure<PayPeriodOptions>(builder.Configuration.GetSection("PayPeriod"));
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+string authConnectionString = builder.Configuration.GetConnectionString("AuthConnection")
+    ?? "Data Source=docker-data/App_Data/auth.db";
+
+string appConnectionString = builder.Configuration.GetConnectionString("AppConnection")
+    ?? "Data Source=docker-data/App_Data/app.db";
+
+string resolvedAuthConnectionString = ResolveSqliteConnectionString(
+    authConnectionString,
+    builder.Environment.ContentRootPath);
+
+string resolvedAppConnectionString = ResolveSqliteConnectionString(
+    appConnectionString,
+    builder.Environment.ContentRootPath);
+
+builder.Services.AddDbContext<AuthDbContext>(options =>
 {
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.UseSqlite(resolvedAuthConnectionString);
+});
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    options.UseSqlite(resolvedAppConnectionString);
 });
 
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
-builder.Services.AddScoped<IGoogleUserProvisioningService, GoogleUserProvisioningService>();
+builder.Services.AddScoped<IUserAuthService, UserAuthService>();
 builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
 builder.Services.AddScoped<IFortnightSummaryService, FortnightSummaryService>();
 builder.Services.AddScoped<IFortnightExportService, FortnightExportService>();
+builder.Services.AddScoped<ITilLedgerImportService, TilLedgerImportService>();
 
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
-})
-.AddCookie(options =>
-{
-    options.LoginPath = "/Login";
-    options.AccessDeniedPath = "/AccessDenied";
-    options.Cookie.Name = "TimesheetAutomation.Auth";
-    options.Cookie.HttpOnly = true;
-    options.Cookie.SameSite = SameSiteMode.Lax;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.ExpireTimeSpan = TimeSpan.FromHours(8);
-    options.SlidingExpiration = true;
-})
-.AddGoogle(options =>
-{
-    options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? string.Empty;
-    options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? string.Empty;
-    options.CallbackPath = "/signin-google";
-
-    options.Scope.Clear();
-    options.Scope.Add("openid");
-    options.Scope.Add("profile");
-    options.Scope.Add("email");
-
-    options.Events.OnCreatingTicket = async context =>
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
     {
-        string? email = context.Identity?.FindFirst(ClaimTypes.Email)?.Value
-            ?? context.User.GetProperty("email").GetString();
-
-        string? name = context.Identity?.FindFirst(ClaimTypes.Name)?.Value
-            ?? context.User.GetProperty("name").GetString();
-
-        string? googleSubject = context.User.GetProperty("sub").GetString();
-
-        string hostedDomain = string.Empty;
-        if (context.User.TryGetProperty("hd", out var hdProperty))
-        {
-            hostedDomain = hdProperty.GetString() ?? string.Empty;
-        }
-
-        if (string.IsNullOrWhiteSpace(email) ||
-            string.IsNullOrWhiteSpace(name) ||
-            string.IsNullOrWhiteSpace(googleSubject))
-        {
-            throw new InvalidOperationException("Google sign-in did not return required claims.");
-        }
-
-        if (!string.Equals(hostedDomain, "chemwatch.net", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new UnauthorizedAccessException("Only chemwatch.net accounts are allowed.");
-        }
-
-        if (!email.EndsWith("@chemwatch.net", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new UnauthorizedAccessException("Only chemwatch.net accounts are allowed.");
-        }
-
-        using IServiceScope scope = context.HttpContext.RequestServices.CreateScope();
-        IGoogleUserProvisioningService provisioningService =
-            scope.ServiceProvider.GetRequiredService<IGoogleUserProvisioningService>();
-
-        ApplicationUser applicationUser = await provisioningService.GetOrCreateUserAsync(
-            email,
-            name,
-            hostedDomain,
-            googleSubject,
-            context.HttpContext.RequestAborted);
-
-        List<Claim> claims =
-        [
-            new Claim(ClaimTypes.NameIdentifier, applicationUser.Id.ToString()),
-            new Claim(ClaimTypes.Name, applicationUser.DisplayName),
-            new Claim(ClaimTypes.Email, applicationUser.Email),
-            new Claim("hd", applicationUser.HostedDomain)
-        ];
-
-        if (applicationUser.IsAdmin)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, "Admin"));
-        }
-
-        ClaimsIdentity identity = new(
-            claims,
-            CookieAuthenticationDefaults.AuthenticationScheme);
-
-        context.Principal = new ClaimsPrincipal(identity);
-    };
-
-    options.Events.OnRemoteFailure = context =>
-    {
-        context.Response.Redirect("/AccessDenied");
-        context.HandleResponse();
-        return Task.CompletedTask;
-    };
-});
+        options.LoginPath = "/Login";
+        options.AccessDeniedPath = "/AccessDenied";
+        options.Cookie.Name = "TimesheetAutomation.Auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.SlidingExpiration = true;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    });
 
 builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery();
@@ -137,8 +69,11 @@ var app = builder.Build();
 
 using (IServiceScope scope = app.Services.CreateScope())
 {
-    ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    dbContext.Database.Migrate();
+    AuthDbContext authDbContext = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+    authDbContext.Database.Migrate();
+
+    AppDbContext appDbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    appDbContext.Database.Migrate();
 }
 
 if (!app.Environment.IsDevelopment())
@@ -147,14 +82,41 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
 app.UseStaticFiles();
-
 app.UseRouting();
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapRazorPages();
 
 app.Run();
+
+static string ResolveSqliteConnectionString(string connectionString, string contentRootPath)
+{
+    const string prefix = "Data Source=";
+
+    if (!connectionString.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+    {
+        return connectionString;
+    }
+
+    string rawPath = connectionString[prefix.Length..].Trim().Trim('"');
+
+    if (string.IsNullOrWhiteSpace(rawPath))
+    {
+        throw new InvalidOperationException("The SQLite connection string Data Source is empty.");
+    }
+
+    string fullPath = Path.IsPathRooted(rawPath)
+        ? rawPath
+        : Path.Combine(contentRootPath, rawPath);
+
+    string? directory = Path.GetDirectoryName(fullPath);
+    if (string.IsNullOrWhiteSpace(directory))
+    {
+        throw new InvalidOperationException($"Could not determine the SQLite directory for path '{fullPath}'.");
+    }
+
+    Directory.CreateDirectory(directory);
+
+    return $"{prefix}{fullPath}";
+}
