@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Security.Claims;
 
 namespace TimesheetAutomation.Web.Pages;
 
@@ -10,9 +11,12 @@ public sealed class IndexModel : PageModel
 
     public string? StatusMessage { get; private set; }
 
+    public bool IsAdmin { get; private set; }
+
     public void OnGet()
     {
         DisplayName = User.Identity?.Name ?? "User";
         StatusMessage = TempData["StatusMessage"] as string;
+        IsAdmin = User.IsInRole("Admin");
     }
 }

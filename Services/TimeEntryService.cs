@@ -184,13 +184,11 @@ public sealed class TimeEntryService : ITimeEntryService
     {
         List<TilLedgerEntry> existingLedgerRows = await _dbContext.TilLedgerEntries
             .Where(x => x.SourceKind == "DailyEntry" && x.SourceDailyTimeEntryId == entry.Id)
+            .OrderBy(x => x.SortOrder)
             .ToListAsync(cancellationToken);
 
-        TilLedgerEntry? accruedRow = existingLedgerRows
-            .SingleOrDefault(x => string.Equals(x.EntryType, "Accrued", StringComparison.OrdinalIgnoreCase));
-
-        TilLedgerEntry? takenRow = existingLedgerRows
-            .SingleOrDefault(x => string.Equals(x.EntryType, "Taken", StringComparison.OrdinalIgnoreCase));
+        TilLedgerEntry? accruedRow = existingLedgerRows.SingleOrDefault(x => x.HoursAccrued > 0);
+        TilLedgerEntry? takenRow = existingLedgerRows.SingleOrDefault(x => x.HoursTaken > 0);
 
         string? description = NormalizeNotes(entry.Notes);
 
@@ -198,15 +196,18 @@ public sealed class TimeEntryService : ITimeEntryService
         {
             if (accruedRow is null)
             {
+                int nextSortOrder = await GetNextSortOrderAsync(entry.UserId, cancellationToken);
+
                 accruedRow = new TilLedgerEntry
                 {
                     UserId = entry.UserId,
                     SourceDailyTimeEntryId = entry.Id,
                     SourceKind = "DailyEntry",
                     WorkDate = entry.WorkDate,
-                    EntryType = "Accrued",
-                    Hours = entry.TimeInLieuAccruedHours,
                     Description = description,
+                    HoursAccrued = entry.TimeInLieuAccruedHours,
+                    HoursTaken = 0m,
+                    SortOrder = nextSortOrder,
                     CreatedUtc = DateTime.UtcNow,
                     LastModifiedUtc = DateTime.UtcNow
                 };
@@ -216,8 +217,9 @@ public sealed class TimeEntryService : ITimeEntryService
             else
             {
                 accruedRow.WorkDate = entry.WorkDate;
-                accruedRow.Hours = entry.TimeInLieuAccruedHours;
                 accruedRow.Description = description;
+                accruedRow.HoursAccrued = entry.TimeInLieuAccruedHours;
+                accruedRow.HoursTaken = 0m;
                 accruedRow.LastModifiedUtc = DateTime.UtcNow;
             }
         }
@@ -230,15 +232,18 @@ public sealed class TimeEntryService : ITimeEntryService
         {
             if (takenRow is null)
             {
+                int nextSortOrder = await GetNextSortOrderAsync(entry.UserId, cancellationToken);
+
                 takenRow = new TilLedgerEntry
                 {
                     UserId = entry.UserId,
                     SourceDailyTimeEntryId = entry.Id,
                     SourceKind = "DailyEntry",
                     WorkDate = entry.WorkDate,
-                    EntryType = "Taken",
-                    Hours = entry.TimeInLieuTakenHours,
                     Description = description,
+                    HoursAccrued = 0m,
+                    HoursTaken = entry.TimeInLieuTakenHours,
+                    SortOrder = nextSortOrder,
                     CreatedUtc = DateTime.UtcNow,
                     LastModifiedUtc = DateTime.UtcNow
                 };
@@ -248,8 +253,9 @@ public sealed class TimeEntryService : ITimeEntryService
             else
             {
                 takenRow.WorkDate = entry.WorkDate;
-                takenRow.Hours = entry.TimeInLieuTakenHours;
                 takenRow.Description = description;
+                takenRow.HoursAccrued = 0m;
+                takenRow.HoursTaken = entry.TimeInLieuTakenHours;
                 takenRow.LastModifiedUtc = DateTime.UtcNow;
             }
         }
@@ -259,6 +265,16 @@ public sealed class TimeEntryService : ITimeEntryService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<int> GetNextSortOrderAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        int currentMax = await _dbContext.TilLedgerEntries
+            .Where(x => x.UserId == userId)
+            .Select(x => (int?)x.SortOrder)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        return currentMax + 1;
     }
 
     private void ValidateBusinessRules(TimeEntryInputModel input)

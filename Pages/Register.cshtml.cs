@@ -76,8 +76,8 @@ public sealed class RegisterModel : PageModel
                 AllowRefresh = true
             });
 
-        TempData["StatusMessage"] = "Account created successfully. Please complete the welcome setup step.";
-        return RedirectToPage("/Welcome");
+        TempData["StatusMessage"] = "Account created successfully. Please set up your authenticator app.";
+        return RedirectToPage("/EnableAuthenticator");
     }
 
     public sealed class InputModel

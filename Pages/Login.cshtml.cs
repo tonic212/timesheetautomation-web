@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -22,6 +23,9 @@ public sealed class LoginModel : PageModel
 
     [BindProperty]
     public InputModel Input { get; set; } = new();
+
+    [TempData]
+    public string? StatusMessage { get; set; }
 
     public IActionResult OnGet()
     {
@@ -51,6 +55,26 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
+        if (user.IsTwoFactorEnabled)
+        {
+            PendingTwoFactorLogin pending = new()
+            {
+                UserId = user.Id,
+                RememberMe = Input.RememberMe
+            };
+
+            TempData["PendingTwoFactorLogin"] = JsonSerializer.Serialize(pending);
+            return RedirectToPage("/LoginWith2fa");
+        }
+
+        await SignInUserAsync(user, Input.RememberMe, cancellationToken);
+
+        TempData["StatusMessage"] = "Signed in successfully.";
+        return RedirectToPage("/Index");
+    }
+
+    private async Task SignInUserAsync(ApplicationUser user, bool rememberMe, CancellationToken cancellationToken)
+    {
         List<Claim> claims =
         [
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
@@ -71,11 +95,11 @@ public sealed class LoginModel : PageModel
 
         AuthenticationProperties properties = new()
         {
-            IsPersistent = Input.RememberMe,
+            IsPersistent = rememberMe,
             AllowRefresh = true
         };
 
-        if (Input.RememberMe)
+        if (rememberMe)
         {
             properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
         }
@@ -85,8 +109,7 @@ public sealed class LoginModel : PageModel
             principal,
             properties);
 
-        TempData["StatusMessage"] = "Signed in successfully.";
-        return RedirectToPage("/Index");
+        await _userAuthService.UpdateLastLoginUtcAsync(user.Id, cancellationToken);
     }
 
     public sealed class InputModel

@@ -36,7 +36,11 @@ public sealed class AppDbContext : DbContext
             .HasIndex(x => x.UserId);
 
         modelBuilder.Entity<TilLedgerEntry>()
-            .HasIndex(x => new { x.UserId, x.WorkDate });
+            .HasIndex(x => new { x.UserId, x.SortOrder })
+            .IsUnique();
+
+        modelBuilder.Entity<TilLedgerEntry>()
+            .HasIndex(x => new { x.SourceDailyTimeEntryId, x.SourceKind });
 
         modelBuilder.Entity<TilLedgerEntry>()
             .HasOne(x => x.SourceDailyTimeEntry)

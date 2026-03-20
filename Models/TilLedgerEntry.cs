@@ -21,15 +21,16 @@ public sealed class TilLedgerEntry
     [Required]
     public DateOnly WorkDate { get; set; }
 
-    [Required]
-    [MaxLength(20)]
-    public string EntryType { get; set; } = string.Empty;
-
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal Hours { get; set; }
-
     [MaxLength(500)]
     public string? Description { get; set; }
+
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal HoursAccrued { get; set; }
+
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal HoursTaken { get; set; }
+
+    public int SortOrder { get; set; }
 
     [Required]
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

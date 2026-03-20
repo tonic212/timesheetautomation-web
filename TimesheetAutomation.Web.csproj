@@ -9,12 +9,20 @@
 
 	<ItemGroup>
 		<PackageReference Include="ClosedXML" Version="0.104.2" />
-		<PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="8.0.14" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.14">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.14" />
+		<PackageReference Include="Otp.NET" Version="1.4.0" />
+		<PackageReference Include="QRCoder" Version="1.4.3" />
+		<PackageReference Include="MailKit" Version="4.7.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="docker-data\App_Data\" />
+		<Folder Include="docker-data\Exports\" />
+		<Folder Include="docker-data\Templates\" />
 	</ItemGroup>
 
 </Project>

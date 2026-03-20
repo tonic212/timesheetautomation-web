@@ -48,5 +48,18 @@
                 </div>
             </div>
         </div>
+
+        @if (Model.IsAdmin)
+        {
+            <div class="col-md-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <h2 class="h5">Admin Security</h2>
+                        <p class="text-muted">Reset passwords and MFA for internal users.</p>
+                        <a asp-page="/AdminSecurity" class="btn btn-primary">Open admin security</a>
+                    </div>
+                </div>
+            </div>
+        }
     </div>
 </div>

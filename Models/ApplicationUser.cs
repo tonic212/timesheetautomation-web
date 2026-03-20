@@ -34,6 +34,13 @@ public sealed class ApplicationUser
 
     public bool IsAdmin { get; set; }
 
+    public bool IsTwoFactorEnabled { get; set; }
+
+    [MaxLength(200)]
+    public string? AuthenticatorKey { get; set; }
+
+    public string? RecoveryCodes { get; set; }
+
     [Required]
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 

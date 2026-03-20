@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TimesheetAutomation.Web.Data;
 
@@ -10,9 +11,11 @@ using TimesheetAutomation.Web.Data;
 namespace TimesheetAutomation.Web.Migrations.App
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260320011249_InitialDb")]
+    partial class InitialDb
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.14");
@@ -128,17 +131,16 @@ namespace TimesheetAutomation.Web.Migrations.App
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
-                    b.Property<decimal>("HoursAccrued")
-                        .HasColumnType("decimal(5,2)");
+                    b.Property<string>("EntryType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
 
-                    b.Property<decimal>("HoursTaken")
+                    b.Property<decimal>("Hours")
                         .HasColumnType("decimal(5,2)");
 
                     b.Property<DateTime>("LastModifiedUtc")
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("INTEGER");
 
                     b.Property<Guid?>("SourceDailyTimeEntryId")
                         .HasColumnType("TEXT");
@@ -156,12 +158,11 @@ namespace TimesheetAutomation.Web.Migrations.App
 
                     b.HasKey("Id");
 
+                    b.HasIndex("SourceDailyTimeEntryId");
+
                     b.HasIndex("UserId");
 
-                    b.HasIndex("SourceDailyTimeEntryId", "SourceKind");
-
-                    b.HasIndex("UserId", "SortOrder")
-                        .IsUnique();
+                    b.HasIndex("UserId", "WorkDate");
 
                     b.ToTable("TilLedgerEntries");
                 });

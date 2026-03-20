@@ -33,105 +33,122 @@ public sealed class TilLedgerImportService : ITilLedgerImportService
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        List<TilLedgerEntry> existingDailyRows = await _dbContext.TilLedgerEntries
-            .Where(x => x.UserId == userId && x.SourceKind == "DailyEntry")
-            .ToListAsync(cancellationToken);
+        int nextSortOrder = await _dbContext.TilLedgerEntries
+            .Where(x => x.UserId == userId)
+            .Select(x => (int?)x.SortOrder)
+            .MaxAsync(cancellationToken) ?? 0;
 
         int importedCount = 0;
-        int row = 6;
 
-        while (true)
+        // Row 5 is opening balance/header.
+        // Row 6 is the first expected ledger row.
+        int startRow = 6;
+        int lastUsedRow = worksheet.LastRowUsed()?.RowNumber() ?? startRow;
+
+        for (int row = startRow; row <= lastUsedRow; row++)
         {
             IXLCell dateCell = worksheet.Cell(row, "A");
-            IXLCell descriptionCell = worksheet.Cell(row, "B");
-            IXLCell hoursCell = worksheet.Cell(row, "C");
+            IXLCell reasonCell = worksheet.Cell(row, "B");
+            IXLCell accruedCell = worksheet.Cell(row, "C");
+            IXLCell takenCell = worksheet.Cell(row, "D");
+            IXLCell balanceCell = worksheet.Cell(row, "E");
 
-            bool rowIsEmpty =
-                dateCell.IsEmpty() &&
-                descriptionCell.IsEmpty() &&
-                hoursCell.IsEmpty();
+            bool rowIsCompletelyEmpty =
+                IsEffectivelyEmpty(dateCell) &&
+                IsEffectivelyEmpty(reasonCell) &&
+                IsEffectivelyEmpty(accruedCell) &&
+                IsEffectivelyEmpty(takenCell) &&
+                IsEffectivelyEmpty(balanceCell);
 
-            if (rowIsEmpty)
+            if (rowIsCompletelyEmpty)
             {
-                break;
-            }
-
-            if (dateCell.IsEmpty() || hoursCell.IsEmpty())
-            {
-                row++;
                 continue;
             }
 
-            DateOnly workDate = ReadDate(dateCell);
-            decimal signedHours = ReadSignedHours(hoursCell);
-
-            if (signedHours == 0)
+            if (!TryReadDate(dateCell, out DateOnly workDate))
             {
-                row++;
                 continue;
             }
 
-            string entryType = signedHours < 0 ? "Taken" : "Accrued";
-            decimal absoluteHours = Math.Abs(signedHours);
-            string? description = Normalize(descriptionCell.GetString());
+            decimal hoursAccrued = ReadDecimalHours(accruedCell);
+            decimal hoursTaken = ReadDecimalHours(takenCell);
+            string? description = Normalize(reasonCell.GetFormattedString());
 
-            bool alreadyExistsAsDailyEntry = existingDailyRows.Any(x =>
-                x.WorkDate == workDate &&
-                string.Equals(x.EntryType, entryType, StringComparison.OrdinalIgnoreCase) &&
-                x.Hours == absoluteHours &&
-                string.Equals(Normalize(x.Description), description, StringComparison.Ordinal));
-
-            if (!alreadyExistsAsDailyEntry)
+            if (hoursAccrued == 0m && hoursTaken == 0m)
             {
-                TilLedgerEntry imported = new()
-                {
-                    UserId = userId,
-                    SourceDailyTimeEntryId = null,
-                    SourceKind = "Imported",
-                    WorkDate = workDate,
-                    EntryType = entryType,
-                    Hours = absoluteHours,
-                    Description = description,
-                    CreatedUtc = DateTime.UtcNow,
-                    LastModifiedUtc = DateTime.UtcNow
-                };
-
-                _dbContext.TilLedgerEntries.Add(imported);
-                importedCount++;
+                continue;
             }
 
-            row++;
+            nextSortOrder++;
+
+            TilLedgerEntry imported = new()
+            {
+                UserId = userId,
+                SourceDailyTimeEntryId = null,
+                SourceKind = "Imported",
+                WorkDate = workDate,
+                Description = description,
+                HoursAccrued = hoursAccrued,
+                HoursTaken = hoursTaken,
+                SortOrder = nextSortOrder,
+                CreatedUtc = DateTime.UtcNow,
+                LastModifiedUtc = DateTime.UtcNow
+            };
+
+            _dbContext.TilLedgerEntries.Add(imported);
+            importedCount++;
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return importedCount;
     }
 
-    private static DateOnly ReadDate(IXLCell cell)
+    private static bool TryReadDate(IXLCell cell, out DateOnly date)
     {
         if (cell.TryGetValue<DateTime>(out DateTime dateTime))
         {
-            return DateOnly.FromDateTime(dateTime);
+            date = DateOnly.FromDateTime(dateTime);
+            return true;
         }
 
-        if (DateOnly.TryParse(cell.GetString(), out DateOnly dateOnly))
+        string formatted = cell.GetFormattedString().Trim();
+        if (string.IsNullOrWhiteSpace(formatted))
         {
-            return dateOnly;
+            date = default;
+            return false;
         }
 
-        throw new InvalidOperationException($"Could not read a valid date from cell {cell.Address}.");
+        if (DateOnly.TryParse(formatted, out DateOnly parsedDate))
+        {
+            date = parsedDate;
+            return true;
+        }
+
+        if (DateTime.TryParse(formatted, out DateTime parsedDateTime))
+        {
+            date = DateOnly.FromDateTime(parsedDateTime);
+            return true;
+        }
+
+        date = default;
+        return false;
     }
 
-    private static decimal ReadSignedHours(IXLCell cell)
+    private static decimal ReadDecimalHours(IXLCell cell)
     {
-        if (cell.TryGetValue<TimeSpan>(out TimeSpan timeSpan))
+        if (IsEffectivelyEmpty(cell))
         {
-            return Math.Round((decimal)timeSpan.TotalHours, 2, MidpointRounding.AwayFromZero);
+            return 0m;
         }
 
-        if (cell.TryGetValue<double>(out double numericValue))
+        if (cell.TryGetValue<decimal>(out decimal decimalValue))
         {
-            return Math.Round((decimal)(numericValue * 24d), 2, MidpointRounding.AwayFromZero);
+            return Math.Round(decimalValue, 2, MidpointRounding.AwayFromZero);
+        }
+
+        if (cell.TryGetValue<double>(out double doubleValue))
+        {
+            return Math.Round((decimal)doubleValue, 2, MidpointRounding.AwayFromZero);
         }
 
         string text = cell.GetFormattedString().Trim();
@@ -140,12 +157,23 @@ public sealed class TilLedgerImportService : ITilLedgerImportService
             return 0m;
         }
 
-        if (TimeSpan.TryParse(text, out TimeSpan parsedTime))
+        if (decimal.TryParse(text, out decimal parsed))
         {
-            return Math.Round((decimal)parsedTime.TotalHours, 2, MidpointRounding.AwayFromZero);
+            return Math.Round(parsed, 2, MidpointRounding.AwayFromZero);
         }
 
-        throw new InvalidOperationException($"Could not read valid hours from cell {cell.Address}.");
+        return 0m;
+    }
+
+    private static bool IsEffectivelyEmpty(IXLCell cell)
+    {
+        if (cell.IsEmpty())
+        {
+            return true;
+        }
+
+        string text = cell.GetFormattedString().Trim();
+        return string.IsNullOrWhiteSpace(text);
     }
 
     private static string? Normalize(string? value)

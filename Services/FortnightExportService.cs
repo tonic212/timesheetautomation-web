@@ -36,9 +36,10 @@ public sealed class FortnightExportService : IFortnightExportService
             .OrderBy(x => x.WorkDate)
             .ToListAsync(cancellationToken);
 
-        List<TilLedgerEntry> historicalLedgerRows = await _dbContext.TilLedgerEntries
+        List<TilLedgerEntry> allLedgerRowsUpToEndDate = await _dbContext.TilLedgerEntries
             .Where(x => x.UserId == userId && x.WorkDate <= endDate)
-            .OrderBy(x => x.WorkDate)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.WorkDate)
             .ThenBy(x => x.CreatedUtc)
             .ToListAsync(cancellationToken);
 
@@ -47,7 +48,7 @@ public sealed class FortnightExportService : IFortnightExportService
         {
             throw new FileNotFoundException(
                 $"Excel template was not found at '{templateFullPath}'. " +
-                $"Copy your master workbook to that location before exporting.");
+                "Copy your master workbook to that location before exporting.");
         }
 
         string userExportFolder = Path.Combine(GetAbsolutePath(_options.ExportRootFolder), userId.ToString("N"));
@@ -81,11 +82,10 @@ public sealed class FortnightExportService : IFortnightExportService
 
             ClearWritableEntryCells(timeSheet);
             FillTimeSheet(timeSheet, startDate, currentFortnightEntries);
-
             ValidateTimeSheetFormulas(timeSheet);
 
             ClearTilBalanceLedgerArea(tilBalanceSheet);
-            FillTilBalanceLedger(tilBalanceSheet, historicalLedgerRows);
+            FillTilBalanceLedger(tilBalanceSheet, allLedgerRowsUpToEndDate);
 
             workbook.Save();
         }
@@ -176,6 +176,7 @@ public sealed class FortnightExportService : IFortnightExportService
             worksheet.Cell(row, "B").Clear(XLClearOptions.Contents);
             worksheet.Cell(row, "C").Clear(XLClearOptions.Contents);
             worksheet.Cell(row, "D").Clear(XLClearOptions.Contents);
+            worksheet.Cell(row, "E").Clear(XLClearOptions.Contents);
         }
     }
 
@@ -185,44 +186,41 @@ public sealed class FortnightExportService : IFortnightExportService
 
         foreach (TilLedgerEntry ledgerRow in ledgerRows)
         {
-            decimal signedHours = string.Equals(ledgerRow.EntryType, "Taken", StringComparison.OrdinalIgnoreCase)
-                ? -ledgerRow.Hours
-                : ledgerRow.Hours;
+            WriteDateCell(worksheet.Cell(row, "A"), ledgerRow.WorkDate);
+            worksheet.Cell(row, "B").Value = string.IsNullOrWhiteSpace(ledgerRow.Description)
+                ? GetDefaultLedgerDescription(ledgerRow)
+                : ledgerRow.Description!.Trim();
 
-            WriteTilBalanceRow(
-                worksheet,
-                row,
-                ledgerRow.WorkDate,
-                string.IsNullOrWhiteSpace(ledgerRow.Description) ? ledgerRow.EntryType : ledgerRow.Description!,
-                signedHours);
+            WriteDecimalHoursCell(worksheet.Cell(row, "C"), ledgerRow.HoursAccrued);
+            WriteDecimalHoursCell(worksheet.Cell(row, "D"), ledgerRow.HoursTaken);
 
+            if (row == _options.TilBalanceStartRow)
+            {
+                worksheet.Cell(row, "E").FormulaA1 = $"C{row}-D{row}";
+            }
+            else
+            {
+                worksheet.Cell(row, "E").FormulaA1 = $"E{row - 1}+C{row}-D{row}";
+            }
+
+            worksheet.Cell(row, "E").Style.NumberFormat.Format = "0.00";
             row++;
         }
     }
 
-    private void WriteTilBalanceRow(IXLWorksheet worksheet, int row, DateOnly workDate, string description, decimal hours)
+    private static string GetDefaultLedgerDescription(TilLedgerEntry ledgerRow)
     {
-        WriteDateCell(worksheet.Cell(row, "A"), workDate);
-        worksheet.Cell(row, "B").Value = description;
-        WriteSignedHourDurationCell(worksheet.Cell(row, "C"), hours);
-
-        if (row == _options.TilBalanceStartRow)
+        if (ledgerRow.HoursAccrued > 0 && ledgerRow.HoursTaken == 0)
         {
-            IXLCell previousBalanceCell = worksheet.Cell(row - 1, "D");
+            return "TIL Accrued";
+        }
 
-            if (previousBalanceCell.HasFormula || !previousBalanceCell.IsEmpty())
-            {
-                worksheet.Cell(row, "D").FormulaA1 = $"D{row - 1}+C{row}";
-            }
-            else
-            {
-                worksheet.Cell(row, "D").FormulaA1 = $"C{row}";
-            }
-        }
-        else
+        if (ledgerRow.HoursTaken > 0 && ledgerRow.HoursAccrued == 0)
         {
-            worksheet.Cell(row, "D").FormulaA1 = $"D{row - 1}+C{row}";
+            return "TIL Taken";
         }
+
+        return "TIL Entry";
     }
 
     private void ValidateTimeSheetFormulas(IXLWorksheet worksheet)
@@ -324,24 +322,16 @@ public sealed class FortnightExportService : IFortnightExportService
         cell.Style.DateFormat.Format = "h:mm:ss";
     }
 
-    private static void WriteSignedHourDurationCell(IXLCell cell, decimal hours)
+    private static void WriteDecimalHoursCell(IXLCell cell, decimal hours)
     {
-        if (hours == 0)
+        if (hours == 0m)
         {
             cell.Clear(XLClearOptions.Contents);
             return;
         }
 
-        if (hours > 0)
-        {
-            cell.Value = TimeSpan.FromHours((double)hours);
-        }
-        else
-        {
-            cell.Value = hours / 24m;
-        }
-
-        cell.Style.NumberFormat.Format = "[h]:mm:ss";
+        cell.Value = hours;
+        cell.Style.NumberFormat.Format = "0.00";
     }
 
     private static void WriteWorkedDayCommentCell(IXLCell cell, DailyTimeEntry entry)

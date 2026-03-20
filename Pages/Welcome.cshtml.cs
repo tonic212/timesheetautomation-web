@@ -11,13 +11,16 @@ public sealed class WelcomeModel : PageModel
 {
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ITilLedgerImportService _tilLedgerImportService;
+    private readonly IUserAuthService _userAuthService;
 
     public WelcomeModel(
         ICurrentUserAccessor currentUserAccessor,
-        ITilLedgerImportService tilLedgerImportService)
+        ITilLedgerImportService tilLedgerImportService,
+        IUserAuthService userAuthService)
     {
         _currentUserAccessor = currentUserAccessor;
         _tilLedgerImportService = tilLedgerImportService;
+        _userAuthService = userAuthService;
     }
 
     [BindProperty]
@@ -26,8 +29,22 @@ public sealed class WelcomeModel : PageModel
     [TempData]
     public string? StatusMessage { get; set; }
 
-    public void OnGet()
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
+        Guid userId = _currentUserAccessor.GetRequiredUserId(User);
+        var user = await _userAuthService.GetByIdAsync(userId, cancellationToken);
+
+        if (user is null)
+        {
+            return RedirectToPage("/Login");
+        }
+
+        if (!user.IsTwoFactorEnabled)
+        {
+            return RedirectToPage("/EnableAuthenticator");
+        }
+
+        return Page();
     }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
@@ -51,6 +68,12 @@ public sealed class WelcomeModel : PageModel
         int importedCount = await _tilLedgerImportService.ImportLatestWorkbookAsync(userId, stream, cancellationToken);
 
         TempData["StatusMessage"] = $"{importedCount} historical TIL ledger row(s) imported successfully.";
+        return RedirectToPage("/Index");
+    }
+
+    public IActionResult OnPostSkip()
+    {
+        TempData["StatusMessage"] = "Latest timesheet upload skipped. You can import it later from the app.";
         return RedirectToPage("/Index");
     }
 }

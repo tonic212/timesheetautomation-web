@@ -12,6 +12,8 @@ public sealed class AuthDbContext : DbContext
 
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
 
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -26,6 +28,13 @@ public sealed class AuthDbContext : DbContext
 
         modelBuilder.Entity<ApplicationUser>()
             .HasIndex(x => x.GoogleSubject)
+            .IsUnique();
+
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasIndex(x => x.UserId);
+
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasIndex(x => x.TokenHash)
             .IsUnique();
     }
 }
